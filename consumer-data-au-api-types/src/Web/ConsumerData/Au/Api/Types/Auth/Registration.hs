@@ -72,6 +72,7 @@ module Web.ConsumerData.Au.Api.Types.Auth.Registration
   , RegistrationClientUri(..)
   , RegistrationAccessToken(..)
   , RegistrationResponse(..)
+  , _FapiGrantTypes
   )
 where
 
@@ -617,11 +618,11 @@ data JwsRegisteredClaims = JwsRegisteredClaims
 data JwsHeaders = JwsHeaders
   {
   -- | The JWK @alg@ to sign the request with.
-    _alg     :: FapiPermittedAlg
+    _alg :: FapiPermittedAlg
 
   -- | @kid@ is a required header for
   -- <https://consumerdatastandardsaustralia.github.io/infosec/#jose-jwt-header §CDR>.
-  , _kid     :: FapiKid
+  , _kid :: FapiKid
 } deriving (Generic, Show, Eq)
 
 -- | The following claims are specified in
@@ -633,65 +634,65 @@ data JwsHeaders = JwsHeaders
 data ClientMetaData = ClientMetaData {
   -- | The `alg` algorithm that must be used for signing request objects sent to
   -- the OP.
-    _requestObjectSigningAlg                :: FapiPermittedAlg
+    _requestObjectSigningAlg    :: FapiPermittedAlg
 
   -- | Kind of the application. CDR mandates this to be just @web@ (i.e no
   -- @native@ apps are allowed).
-  , _applicationType                        :: FapiApplicationType
+  , _applicationType            :: FapiApplicationType
 
   -- | Specifies which token endpoint authentication method the client will use,
   -- and also the algorithm (@token_endpoint_auth_signing_alg@) that must be
   -- used for signing if a JWT auth method is used.
-  , _tokenEndpointAuthMethod                :: FapiTokenEndpointAuthMethod
+  , _tokenEndpointAuthMethod    :: FapiTokenEndpointAuthMethod
 
   -- | The set of grant types that a client will restrict itself to using (see
   -- <https://openid.net/specs/openid-connect-registration-1_0.html OIDC-R 2. Client Metadata>
   -- and <https://tools.ietf.org/html/rfc7591 §RFC7591 2. -- Client Metadata>).
   -- If omitted, the default is that the client will use only the
   -- `authorization_code` grant type.
-  , _grantTypes                             :: Maybe FapiGrantTypes
+  , _grantTypes                 :: Maybe FapiGrantTypes
 
   -- | Human-readable name of the client to be presented to the end user.
   -- Mandatory field according to CDR.
-  , _clientName                             :: Script
+  , _clientName                 :: Script
 
   -- | URL of the home page of the client.
-  , _clientUri                              :: Maybe ScriptUri
+  , _clientUri                  :: Maybe ScriptUri
 
   -- | Array of e-mail addresses of people responsible for the client.
-  , _contacts                               :: Maybe RegistrationContacts 
+  , _contacts                   :: Maybe RegistrationContacts
 
   -- | URL that references a logo for the client application.
-  , _logoUri                                :: Maybe ScriptUri
+  , _logoUri                    :: Maybe ScriptUri
 
   -- | URL that the client provides to the end user in order to read about the how
   -- the user data will be used.
-  , _policyUri                              :: Maybe ScriptUri
+  , _policyUri                  :: Maybe ScriptUri
 
   -- | URL that the client provides to the end user to read about the client's
   -- terms of service.
-  , _tosUri                                 :: Maybe ScriptUri
+  , _tosUri                     :: Maybe ScriptUri
 
   -- | Requested for responses to this client. Mandatory field according to CDR.
-  , _subjectType                            :: SubjectType
+  , _subjectType                :: SubjectType
 
   -- | References an HTTPS URL of a remote file containing a single JSON array of
   -- @redirect_uri@ values.
-  , _sectorIdentifierUri                    :: Maybe HttpsUrl
+  , _sectorIdentifierUri        :: Maybe HttpsUrl
 
   -- | Either the @jwks_uri@ or @jwks@ parameter specifying client's JWKS.
-  , _keySet                                 :: Maybe JwkSet
+  , _keySet                     :: Maybe JwkSet
 
   -- | Array of @request_uri@ values that are pre-registered by the RP for use at
   -- the OP, which may cache their contents and not retrieve them at the time
   -- they are used in a request.
-  , _requestUris                            :: Maybe RequestUris
+  , _requestUris                :: Maybe RequestUris
 
   -- | Non-empty array of redirection URI values used by the client to match
   -- against supplied @redirect_uri@ request parameter. If using @web@ scheme
   -- these must all be HTTPS, and must not use 'localhost' as hostname.
   -- Mandatory field, according to OIDC-R. FAPI restricts these to all be HTTPS.
-  , _redirectUris                           :: RedirectUrls
+  , _redirectUris               :: RedirectUrls
 
   -- | The @request_object_encryption_alg@ and @request_object_encryption_enc@
   -- parameters for specifying the JWS `alg` and `enc` algorithms (that might
@@ -700,43 +701,43 @@ data ClientMetaData = ClientMetaData {
   -- nested JWT. Warning: a RP can supply unencrypted requests, even if this is
   -- present, as this is only a declaration that the RP 'might' encrypt request
   -- objects. See 'RequestObjectEncryption' for more info.
-  , _requestObjectEncryption                :: Maybe RequestObjectEncryption
+  , _requestObjectEncryption    :: Maybe RequestObjectEncryption
 
   -- | The @userinfo_signed_response_alg@ parameter for specifying which JWS `alg`
   -- algorithm should be used for signing UserInfo responses.
-  , _userinfoSignedResponseAlg              :: Maybe FapiPermittedAlg
+  , _userinfoSignedResponseAlg  :: Maybe FapiPermittedAlg
 
   -- | The @id_token_encrypted_response_alg@ and @id_token_encrypted_response_enc@
   -- values for specifying how the ID token should be encrypted; see
   -- 'IdTokenEncryption' for more information. Mandatory field according to CDR.
-  , _idTokenEncryption                      :: Maybe IdTokenEncryption
+  , _idTokenEncryption          :: Maybe IdTokenEncryption
 
   -- | JSON array containing a list of OAuth 2.0 @response_type@ values that the
   -- client will restrict itself to using; defaults to @code id_token@ if
   -- omitted. FAPI restricts these to be either `code id_token` or `code
   -- id_token token`.
-  , _responseTypes                          :: Maybe FapiResponseTypes
+  , _responseTypes              :: Maybe FapiResponseTypes
 
   -- | Specifies that the end user must be actively authenticated if the end user
   -- was authenticated longer than the specified number of seconds ago; the
   -- @max_age@ request object parameter overides this.
-  , _defaultMaxAge                          :: Maybe DefaultMaxAge
+  , _defaultMaxAge              :: Maybe DefaultMaxAge
 
   -- | Whether the @auth_time@ claim in the ID token is required, defaults to
   -- False.
-  , _requireAuthTime                        :: Maybe Bool
+  , _requireAuthTime            :: Maybe Bool
 
   -- | Default 'Authentication Context Class Reference' (ACR) values for requests,
   -- values ordered by preference; defaults overridden by supplied values.
-  , _defaultAcrValues                       :: Maybe FapiAcrValues
+  , _defaultAcrValues           :: Maybe FapiAcrValues
 
   -- | HTTS URL which can be used by a third-party to initiate a login by the RP.
-  , _initiateLoginUri                       :: Maybe HttpsUrl
+  , _initiateLoginUri           :: Maybe HttpsUrl
 
   -- | The @userinfo_encrypted_response_alg@ and @userinfo_encrypted_response_enc@
   -- values for specifying how UserInfo response should be encrypted; see
   -- 'UserInfoEncryption' for more information.
-  , _userInfoEncryption                     :: Maybe UserInfoEncryption
+  , _userInfoEncryption         :: Maybe UserInfoEncryption
 
   -- | The `alg` for signing the ID token issued to this client. NB: OIDC-R allows
   -- this to be optional (see
@@ -744,27 +745,22 @@ data ClientMetaData = ClientMetaData {
   -- but by using FAPI the implication is that it is mandatory
   -- (<https://openid.net/specs/openid-financial-api-part-2.html#public-client §FAPI RW - Section 5.2.3 >).
   -- Mandatory field according to CDR.
-  , _idTokenSignedResponseAlg               :: FapiPermittedAlg 
+  , _idTokenSignedResponseAlg   :: FapiPermittedAlg
 
   -- | A set of scopes, containing at least @openid@.
-  , _scope                                  :: Maybe FapiScopes
+  , _scope                      :: Maybe FapiScopes
 
   -- | Unique identifier string for the client, which should remain the same
   -- across all instances of the client software, and all versions of the client
   -- software. This must match the software ID in the SSA if supplied.
-  , _softwareId                             :: Maybe SoftwareId
+  , _softwareId                 :: Maybe SoftwareId
 
   -- | The version number of the software should a TPP choose to register and / or
   -- maintain it.
-  , _softwareVersion                        :: Maybe SoftwareVersion 
-
-  -- | @mutual_tls_sender_constrained_access_tokens@ indicating the client's
-  -- intention to use mutual TLS sender constrained access tokens; CDR required
-  -- field that must always be `true`.
-  , _mutualTlsSenderConstrainedAccessTokens :: MutualTlsSCAT
+  , _softwareVersion            :: Maybe SoftwareVersion
 
   -- | @client_notification_endpoint@ - CDR required URI for CIBA callback.
-  , _clientNotificationEndpoint             :: NotificationEndpoint
+  , _clientNotificationEndpoint :: Maybe NotificationEndpoint
 } deriving (Generic, Show, Eq)
 
 -- TODO: Add smart constructor to only allow supply of encoded SS, depending on the CDR spec
@@ -922,6 +918,8 @@ metaDataToAesonClaims ClientMetaData {..} =
     .~ (toJSON <$> _scope)
     &  at "software_id"
     .~ (toJSON <$> _softwareId)
+    &  at "client_notification_endpoint"
+    .~ (toJSON <$> _clientNotificationEndpoint)
     &  at "software_version"
     .~ (toJSON <$> _softwareVersion)
 
@@ -1102,8 +1100,7 @@ aesonClaimsToMetaData m = do
   _scope                      <- getmClaim m "scope"
   _softwareId                 <- getmClaim m "software_id"
   _softwareVersion            <- getmClaim m "software_version"
-  _mutualTlsSenderConstrainedAccessTokens <- getClaim m "software_version"
-  _clientNotificationEndpoint <- getClaim m "software_version"
+  _clientNotificationEndpoint <- getmClaim m "client_notification_endpoint"
   pure ClientMetaData {..}
  where
   chkks ks u = if isJust ks && isJust u

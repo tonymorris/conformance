@@ -7,6 +7,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PackageImports             #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE TemplateHaskell            #-}
@@ -60,7 +61,7 @@ import           Control.Lens
 import           Control.Monad              ((<=<))
 import           Control.Monad.Error.Lens   (throwing_)
 import           Control.Monad.Except       (MonadError)
-import           Crypto.Hash                (HashAlgorithm, hashWith)
+import           "cryptonite" Crypto.Hash   (HashAlgorithm, hashWith)
 import           Crypto.JOSE.JWA.JWS        (Alg (ES256, PS256))
 import           Crypto.JWT                 (StringOrURI)
 import           Data.Aeson.Types
