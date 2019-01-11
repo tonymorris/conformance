@@ -43,7 +43,6 @@ module Web.ConsumerData.Au.Api.Types.Auth.Registration
   , IdTokenEncryption(..)
   , DefaultMaxAge(..)
   , UserInfoEncryption(..)
-  , MutualTlsSCAT(..)
   , NotificationEndpoint(..)
   , SoftwareId(..)
   , SoftwareVersion(..)
@@ -59,10 +58,8 @@ module Web.ConsumerData.Au.Api.Types.Auth.Registration
   , jwtToRegoReq
   , JwksUri(..)
   , _FapiTokenEndpointAuthMethod
-  , _FapiResponseTypes
   , GrantTypes(..)
   , fapiEnc
-  , _MutualTlsSCAT
   , _RegistrationErrorType
   , RegistrationErrorDescription(..)
   , RegistrationErrorType(..)
@@ -528,6 +525,7 @@ instance ToJSON RedirectUrls where
   toJSON (RedirectUrls set) =
     toJsonSpaceSeperatedSet (render . getRedirectUri) set
 
+--todo bug, doesn't use prism
 instance FromJSON RedirectUrls where
   parseJSON =
     fmap RedirectUrls . parseSpaceSeperatedSet (_URI . _Unwrapped) "RedirectUrls"
@@ -548,57 +546,24 @@ _RedirectUrls = prism'
   isHttps uri = and $ liftA2 (==) (URI.mkScheme "https") (uri ^. uriScheme)
   allValid = all (liftA2 (&&) isValidHost isHttps . getRedirectUri)
 
--- | Only CDR acceptable value is @code id_token@
-newtype FapiResponseTypes = FapiResponseTypes (Set ResponseType)
-  deriving (Generic, Show, Eq)
-
-_FapiResponseTypes
-  :: Prism' (Set ResponseType) FapiResponseTypes
-_FapiResponseTypes
- = prism
-  (\case
-    FapiResponseTypes s -> s
-  )
-  (\m -> either (const $ Left m)
-                Right
-                (fapiResponseTypes m :: Either Error FapiResponseTypes)
-  )
-
-fapiResponseTypes :: (MonadError e m, AsError e) => Set ResponseType -> m FapiResponseTypes
-fapiResponseTypes s =
-  bool (throwError (_InvalidClaim # "Empty response type.")) (pure $ FapiResponseTypes s) (not $ null s)
-
-instance ToJSON FapiResponseTypes where
-  toJSON (FapiResponseTypes set) =
-    toJsonSpaceSeperatedSet (responseTypeText #) set
-
-instance FromJSON FapiResponseTypes where
-  parseJSON =
-    fmap FapiResponseTypes . parseSpaceSeperatedSet responseTypeText "FapiResponseTypes"
+-- TODO: prism to enforce only 'code id_token' for future proofing.
+-- | The only CDR acceptable value is @code id_token@
+newtype FapiResponseTypes = FapiResponseTypes ResponseType
+  deriving (Generic, ToJSON, FromJSON, Show, Eq)
 
 newtype FapiScopes = FapiScopes Scopes
   deriving (Generic, ToJSON, FromJSON, Show, Eq)
 
 --TODO: use Auth.Common's values here: must contain @urn:cds.au:cdr:3@ at a minimum.
+--TODO: should be building acr's from JSON with a prism
 newtype FapiAcrValues = FapiAcrValues T.Text
   deriving (Generic, ToJSON, FromJSON, Show, Eq)
-
-newtype MutualTlsSCAT = MutualTlsSCAT Bool
-  deriving (Generic, ToJSON, FromJSON, Show, Eq)
-
--- | Smart constructor for @mutual_tls_sender_constrained_access_tokens@, which
--- can only have the value of True.
-_MutualTlsSCAT :: Prism' Bool MutualTlsSCAT
-_MutualTlsSCAT = prism'
-  (\(MutualTlsSCAT a) -> a)
-  (\case
-    True -> Just $ MutualTlsSCAT True
-    _    -> Nothing
-  )
 
 newtype NotificationEndpoint = NotificationEndpoint HttpsUrl
   deriving (Generic, ToJSON, FromJSON, Show, Eq)
 
+-- | Headers (@alg@ and @kid@) and registered claims (@iss@ etc)
+-- need to be packaged in the rego request for request validation
 data RegistrationRequest = RegistrationRequest {
     _regoReqJwtHeaders       :: JwsHeaders
   , _regoReqRegClaims        :: JwsRegisteredClaims

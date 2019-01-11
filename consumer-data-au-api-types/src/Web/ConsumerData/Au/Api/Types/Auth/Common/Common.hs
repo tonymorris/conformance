@@ -262,6 +262,7 @@ responseTypeText =
         )
         (\case
             "code id_token" -> Right CodeIdToken
+            "id_token code" -> Right CodeIdToken
             t -> Left t
         )
 

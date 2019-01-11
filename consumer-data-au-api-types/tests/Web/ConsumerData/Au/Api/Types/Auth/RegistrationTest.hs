@@ -255,8 +255,8 @@ genRequestUris = RequestUris <$> (Set.fromList . map RequestUri <$> Gen.list (Ra
 genEnc :: ( MonadGen n ) => n FapiEnc
 genEnc = Gen.element [A128CBC_HS256 , A192CBC_HS384 , A256CBC_HS512 , A128GCM , A192GCM , A256GCM]
 
-genResponseTypes :: ( MonadGen n , MonadThrow n ) => n FapiResponseTypes
-genResponseTypes = m2e BadResponseType ( Set.fromList [CodeIdToken] ^? _FapiResponseTypes)
+genResponseTypes :: ( MonadGen n ) => n FapiResponseTypes
+genResponseTypes = pure $ FapiResponseTypes CodeIdToken
 
 genSubs  :: ( MonadGen n) => [a] -> n [a]
 genSubs as = Gen.shuffle as >>= Gen.subsequence
@@ -302,9 +302,6 @@ genInvalidRedirectUris = do
   ba <- badAutho
   (bscheme,bautho) <- bothvalidf gs ba $ (,) <$> scheme <*> autho
   Set.fromList . (map RedirectUri) <$> genUrls bscheme bautho
-
-genTlsScat  :: ( MonadGen n ) => n MutualTlsSCAT
-genTlsScat   = pure $ MutualTlsSCAT True
 
 genNoteEndpoint :: ( MonadGen n, MonadThrow n) => n NotificationEndpoint
 genNoteEndpoint = NotificationEndpoint <$> genHttpsUrl
