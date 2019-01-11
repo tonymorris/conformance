@@ -86,7 +86,7 @@ regoJwtRoundTrips::
 regoJwtRoundTrips =
   property $ do
     rr <- forAllT genRegReq
-    (jwk,_) <- forAllT genJWK
+    (jwk,_) <- forAllT genJWKP256
     let
       ar2jwt :: RegistrationRequest -> ExceptT Error (PropertyT IO) LBS.ByteString
       ar2jwt = fmap encodeCompact . regoReqToJwt jwk
@@ -142,7 +142,7 @@ m2e :: forall m e a.
      e -> Maybe a -> m a
 m2e e = maybe (throwM e) pure
 
--- Generate an iat and exp, with exp being +1s to 10m later
+-- Generate an iat and exp, with exp being + 1s to 10m later + 1 day
 genIatExp ::
   ( MonadGen n
   , MonadIO n
@@ -150,7 +150,8 @@ genIatExp ::
   => n (NumericDate,NumericDate)
 genIatExp = do
   iat <- liftIO getCurrentTime
-  exp <- NumericDate . flip addUTCTime iat . fromInteger <$> Gen.integral (Range.linear 1 600)
+  exp <- NumericDate . flip addUTCTime iat . fromInteger . (+ 86400)
+    <$> Gen.integral (Range.linear 1 600)
   return (NumericDate iat, exp)
 
 genNumDate ::
@@ -231,7 +232,7 @@ genApplicationType :: ( MonadGen n , MonadThrow n ) => n FapiApplicationType
 genApplicationType = m2e BadApplicationType =<< (^? _FapiApplicationType) <$> Gen.element [Web]
 
 genAuthMeth :: ( MonadGen n , MonadThrow n) => n FapiTokenEndpointAuthMethod
-genAuthMeth = (^? _FapiTokenEndpointAuthMethod ) <$> (Gen.element [PrivateKeyJwt,ClientSecretJwt] <*> genAlg) >>= maybe (throwM BadAuthMeth) pure
+genAuthMeth = m2e BadAuthMeth =<< (^? _FapiTokenEndpointAuthMethod ) <$> (Gen.element [PrivateKeyJwt] <*> genAlg)
 
 genScript :: ( MonadGen n ) => n Script
 genScript = Script DefaultLang <$> genText
@@ -254,8 +255,8 @@ genRequestUris = RequestUris <$> (Set.fromList . map RequestUri <$> Gen.list (Ra
 genEnc :: ( MonadGen n ) => n FapiEnc
 genEnc = Gen.element [A128CBC_HS256 , A192CBC_HS384 , A256CBC_HS512 , A128GCM , A192GCM , A256GCM]
 
-genResponseTypes :: ( MonadGen n ) => n FapiResponseTypes
-genResponseTypes = FapiResponseTypes . Set.fromList <$> genSubs [CodeIdToken]
+genResponseTypes :: ( MonadGen n , MonadThrow n ) => n FapiResponseTypes
+genResponseTypes = m2e BadResponseType ( Set.fromList [CodeIdToken] ^? _FapiResponseTypes)
 
 genSubs  :: ( MonadGen n) => [a] -> n [a]
 genSubs as = Gen.shuffle as >>= Gen.subsequence
@@ -325,3 +326,6 @@ instance Exception BadAlgType
 
 data BadAuthMeth = BadAuthMeth  deriving (Show)
 instance Exception BadAuthMeth
+
+data BadResponseType = BadResponseType  deriving (Show)
+instance Exception BadResponseType

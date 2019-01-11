@@ -59,6 +59,7 @@ module Web.ConsumerData.Au.Api.Types.Auth.Registration
   , jwtToRegoReq
   , JwksUri(..)
   , _FapiTokenEndpointAuthMethod
+  , _FapiResponseTypes
   , GrantTypes(..)
   , fapiEnc
   , _MutualTlsSCAT
@@ -102,6 +103,7 @@ import           Crypto.JWT
 import           Crypto.Random.Types                       (MonadRandom)
 import           Data.Aeson
     (FromJSON (..), Result (..), ToJSON (..), Value (..), fromJSON)
+import           Data.Bool                                 (bool)
 import qualified Data.ByteString.Lazy                      as BSL
     (fromStrict, toStrict)
 import           Data.HashMap.Strict                       (HashMap)
@@ -450,7 +452,7 @@ _FapiTokenEndpointAuthMethod = prism
     FapiTokenEndpointAuthMethod f -> f
   )
   (\case
-          -- ClientSecretJwt f -> Right . FapiTokenEndpointAuthMethod . ClientSecretJwt $ f -- Not supported in CDR.
+    -- ClientSecretJwt f -> Right . FapiTokenEndpointAuthMethod . ClientSecretJwt $ f -- Not supported in CDR.
     PrivateKeyJwt f -> Right . FapiTokenEndpointAuthMethod . PrivateKeyJwt $ f
     TlsClientAuth f -> Right . FapiTokenEndpointAuthMethod . TlsClientAuth $ f
     e               -> Left e
@@ -503,10 +505,12 @@ newtype RequestUris = RequestUris {
   deriving (Generic, Show, Eq)
 
 instance ToJSON RequestUris where
-  toJSON (RequestUris set) = toJsonSpaceSeperatedSet (render . getRequestUri) set
+  toJSON (RequestUris set) =
+    toJsonSpaceSeperatedSet (render . getRequestUri) set
 
 instance FromJSON RequestUris where
-  parseJSON = fmap RequestUris . parseSpaceSeperatedSet (_URI . _Unwrapped) "RequestUris"
+  parseJSON =
+    fmap RequestUris . parseSpaceSeperatedSet (_URI . _Unwrapped) "RequestUris"
 
 newtype RequestUri =
   RequestUri {getRequestUri :: URI}
@@ -521,10 +525,12 @@ newtype RedirectUrls = RedirectUrls {
   deriving (Generic, Show, Eq)
 
 instance ToJSON RedirectUrls where
-  toJSON (RedirectUrls set) = toJsonSpaceSeperatedSet (render . getRedirectUri) set
+  toJSON (RedirectUrls set) =
+    toJsonSpaceSeperatedSet (render . getRedirectUri) set
 
 instance FromJSON RedirectUrls where
-  parseJSON = fmap RedirectUrls . parseSpaceSeperatedSet (_URI . _Unwrapped) "RedirectUrls"
+  parseJSON =
+    fmap RedirectUrls . parseSpaceSeperatedSet (_URI . _Unwrapped) "RedirectUrls"
 
 -- | Constructor for @redirect_url@ array; all URLs must be HTTPS, none may be
 -- localhost, as mandated by CDR.
@@ -542,17 +548,33 @@ _RedirectUrls = prism'
   isHttps uri = and $ liftA2 (==) (URI.mkScheme "https") (uri ^. uriScheme)
   allValid = all (liftA2 (&&) isValidHost isHttps . getRedirectUri)
 
--- TODO: It is unclear that our ResponseType type already has a smart
--- constructor; perhaps it should be renamed with FAPI prefix?
--- | FAPI acceptable values are either @code id_token@ or @code id_token token@.
+-- | Only CDR acceptable value is @code id_token@
 newtype FapiResponseTypes = FapiResponseTypes (Set ResponseType)
   deriving (Generic, Show, Eq)
 
+_FapiResponseTypes
+  :: Prism' (Set ResponseType) FapiResponseTypes
+_FapiResponseTypes
+ = prism
+  (\case
+    FapiResponseTypes s -> s
+  )
+  (\m -> either (const $ Left m)
+                Right
+                (fapiResponseTypes m :: Either Error FapiResponseTypes)
+  )
+
+fapiResponseTypes :: (MonadError e m, AsError e) => Set ResponseType -> m FapiResponseTypes
+fapiResponseTypes s =
+  bool (throwError (_InvalidClaim # "Empty response type.")) (pure $ FapiResponseTypes s) (not $ null s)
+
 instance ToJSON FapiResponseTypes where
-  toJSON (FapiResponseTypes set) = toJsonSpaceSeperatedSet (responseTypeText #) set
+  toJSON (FapiResponseTypes set) =
+    toJsonSpaceSeperatedSet (responseTypeText #) set
 
 instance FromJSON FapiResponseTypes where
-  parseJSON = fmap FapiResponseTypes . parseSpaceSeperatedSet responseTypeText "FapiResponseTypes"
+  parseJSON =
+    fmap FapiResponseTypes . parseSpaceSeperatedSet responseTypeText "FapiResponseTypes"
 
 newtype FapiScopes = FapiScopes Scopes
   deriving (Generic, ToJSON, FromJSON, Show, Eq)

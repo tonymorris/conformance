@@ -25,8 +25,6 @@ let
         })
         pkgs.cabal-install
         haskellPackages.ghcid
-        haskellPackages.brittany
-        haskellPackages.cabal-plan
       ];
     buildTools = (drv'.buildTools or []) ++ hie-tools;
   });
