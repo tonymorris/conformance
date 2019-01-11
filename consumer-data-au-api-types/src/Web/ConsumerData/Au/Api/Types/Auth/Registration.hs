@@ -562,12 +562,8 @@ newtype FapiAcrValues = FapiAcrValues T.Text
 newtype NotificationEndpoint = NotificationEndpoint HttpsUrl
   deriving (Generic, ToJSON, FromJSON, Show, Eq)
 
--- | Headers (@alg@ and @kid@) and registered claims (@iss@ etc)
--- need to be packaged in the rego request for request validation
 data RegistrationRequest = RegistrationRequest {
-    _regoReqJwtHeaders       :: JwsHeaders
-  , _regoReqRegClaims        :: JwsRegisteredClaims
-  , _regReqClientMetaData    :: ClientMetaData
+   _regReqClientMetaData     :: ClientMetaData
   -- | A signed JWT containing metadata about the client software. RFC7591
   -- mandates that this is a JWS.
   , _regReqsoftwareStatement :: RegoReqSoftwareStatement
@@ -918,21 +914,22 @@ ssToAesonClaims = metaDataToAesonClaims . _ssMetaData
 regoReqToJwt
   :: (MonadRandom m, MonadError e m, AsError e, JE.AsError e)
   => JWK
+  -> JwsHeaders
+  -> JwsRegisteredClaims
   -> RegistrationRequest
   -> m SignedJWT
-regoReqToJwt jwk rr
+regoReqToJwt jwk h c rr
   = let
       mkCs h m =
         emptyClaimsSet & setRegisteredClaims h & unregisteredClaims .~ m
       ssClaims ssreg = mkCs (_ssSigningData ssreg) (ssToAesonClaims ssreg)
       reqAcm = metaDataToAesonClaims . _regReqClientMetaData $ rr
       reqClaims ssb64 =
-        mkCs (_regoReqRegClaims rr) (reqAcm & at "software_statement" ?~ ssb64)
-      rrh = _regoReqJwtHeaders rr
+        mkCs c (reqAcm & at "software_statement" ?~ ssb64)
       jwsHead =
-        newJWSHeader ((), _FapiPermittedAlg # _alg rrh) & kid ?~ HeaderParam
+        newJWSHeader ((), _FapiPermittedAlg # _alg h) & kid ?~ HeaderParam
           ()
-          (getFapiKid $ _kid rrh)
+          (getFapiKid $ _kid h)
     in
       do
       -- get the b64 SSA as an aeson Value
@@ -967,7 +964,7 @@ jwtToRegoReq
   -> (StringOrURI -> Bool)
   -> JWK
   -> SignedJWT
-  -> m RegistrationRequest
+  -> m (JwsHeaders, JwsRegisteredClaims, RegistrationRequest)
 jwtToRegoReq audPred issPred audPredSsa issPredSsa jwk jwt = do
   let validationSettings =
         defaultJWTValidationSettings audPred & issuerPredicate .~ issPred
@@ -992,11 +989,10 @@ jwtToRegoReq audPred issPred audPredSsa issPredSsa jwk jwt = do
   -- Get the `software_statement` (ie a JWT), extract the headers and the claims
   ss <- SoftwareStatement <$> getRegisteredClaims ssclaims <*> c2m ssclaims
   -- ... putting that inside the software statement in the RegistrationRequest
-  RegistrationRequest
-    <$> jwsHead
-    <*> getRegisteredClaims claims
-    <*> c2m claims
-    <*> pure (DecodedSs ss)
+  rr <- RegistrationRequest <$> c2m claims <*> pure (DecodedSs ss)
+  h <- jwsHead
+  c <- getRegisteredClaims claims
+  pure $ (h,c,rr)
 
 getRegisteredClaims
   :: (MonadError e m, AsError e, AsJWTError e, JE.AsError e, MonadTime m)
