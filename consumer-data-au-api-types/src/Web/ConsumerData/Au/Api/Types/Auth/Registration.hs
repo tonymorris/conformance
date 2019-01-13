@@ -910,15 +910,17 @@ metaDataToAesonClaims ClientMetaData {..} =
 ssToAesonClaims :: SoftwareStatement -> AesonClaims
 ssToAesonClaims = metaDataToAesonClaims . _ssMetaData
 
+-- | JWK that has only CDR accepted @alg@ type, and enforced supply of @kid@
+newtype FapiJwk = FapiJwk JWK
+
 -- | Sign a registration request for sending to OP.
 regoReqToJwt
   :: (MonadRandom m, MonadError e m, AsError e, JE.AsError e)
-  => JWK
-  -> JwsHeaders
+  => FapiJwk
   -> JwsRegisteredClaims
   -> RegistrationRequest
   -> m SignedJWT
-regoReqToJwt jwk h c rr
+regoReqToJwt jwk c rr
   = let
       mkCs h m =
         emptyClaimsSet & setRegisteredClaims h & unregisteredClaims .~ m
@@ -926,6 +928,8 @@ regoReqToJwt jwk h c rr
       reqAcm = metaDataToAesonClaims . _regReqClientMetaData $ rr
       reqClaims ssb64 =
         mkCs c (reqAcm & at "software_statement" ?~ ssb64)
+      --todo must generate this from the FapiJwk
+      --must generate our own headers as Jose 'selects cryptographically strongest' alg based on supplied key, which we dont want
       jwsHead =
         newJWSHeader ((), _FapiPermittedAlg # _alg h) & kid ?~ HeaderParam
           ()
