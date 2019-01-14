@@ -61,13 +61,13 @@ genClaims ::
 genClaims =
   Claims Nothing <$> genIdTokenClaims
 
--- | The only valid signing algorithm as specified in CDR
+-- | The only valid signing algorithm allowed, as specified in CDR
 genJWKP256 ::
   ( MonadGen n
   , MonadIO n
   )
-  => n (JWK.JWK, Alg)
-genJWKP256 = (,PS256) <$> (liftIO . JWK.genJWK =<< genKeyMaterialRSA)
+  => n JWK.JWK
+genJWKP256 = liftIO . JWK.genJWK =<< genKeyMaterialRSA
 
 genJWK ::
   ( MonadGen n
