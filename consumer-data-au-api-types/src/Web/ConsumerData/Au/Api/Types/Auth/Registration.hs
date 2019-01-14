@@ -103,8 +103,6 @@ import           Crypto.JWT
 import           Crypto.Random.Types                       (MonadRandom)
 import           Data.Aeson
     (FromJSON (..), Result (..), ToJSON (..), Value (..), fromJSON)
-import           Data.Aeson.Types                          (Parser)
-import           Data.Bool                                 (bool)
 import qualified Data.ByteString.Lazy                      as BSL
     (fromStrict, toStrict)
 import           Data.HashMap.Strict                       (HashMap)
@@ -123,7 +121,7 @@ import           Text.URI.Lens
     (authHost, uriAuthority, uriScheme)
 import           Web.ConsumerData.Au.Api.Types.Auth.Common
     (ClientId, ClientIss (..), FapiPermittedAlg, HttpsUrl, RedirectUri,
-    ResponseType, Scopes, getRedirectUri, responseTypeText, _FapiPermittedAlg)
+    ResponseType, Scopes, getRedirectUri, _FapiPermittedAlg)
 import           Web.ConsumerData.Au.Api.Types.Auth.Error
     (AsError, Error, _InvalidClaim, _MissingClaim, _ParseError)
 -- | The client registration endpoint is an OAuth 2.0 endpoint that is designed to allow a client to be dynamically registered with the authorization server. 'RegistrationRequest' represents a client request for registration containing meta-data elements specified in <https://tools.ietf.org/html/rfc7591 §RFC7591 - OAuth 2.0 Dynamic Client Registration Protocol> and <https://openid.net/specs/openid-connect-registration-1_0.html §OIDC registration>. Each request must contain a software statement assertion (a JWT is issued and signed by the OpenBanking Directory). Metadata values may be duplicated in the registration request, but if different, those in the software statement will take precedence and override those in the request.
@@ -625,7 +623,7 @@ data ClientMetaData = ClientMetaData {
 
   -- | Kind of the application. CDR mandates this to be just @web@ (i.e no
   -- @native@ apps are allowed).
-  , _applicationType            :: FapiApplicationType
+  , _applicationType            :: Maybe FapiApplicationType
 
   -- | Specifies which token endpoint authentication method the client will use,
   -- and also the algorithm (@token_endpoint_auth_signing_alg@) that must be
@@ -641,7 +639,7 @@ data ClientMetaData = ClientMetaData {
 
   -- | Human-readable name of the client to be presented to the end user.
   -- Mandatory field according to CDR.
-  , _clientName                 :: Script
+  , _clientName                 :: Maybe Script
 
   -- | URL of the home page of the client.
   , _clientUri                  :: Maybe ScriptUri
@@ -661,7 +659,7 @@ data ClientMetaData = ClientMetaData {
   , _tosUri                     :: Maybe ScriptUri
 
   -- | Requested for responses to this client. Mandatory field according to CDR.
-  , _subjectType                :: SubjectType
+  , _subjectType                :: Maybe SubjectType
 
   -- | References an HTTPS URL of a remote file containing a single JSON array of
   -- @redirect_uri@ values.
@@ -844,7 +842,7 @@ metaDataToAesonClaims :: ClientMetaData -> AesonClaims
 metaDataToAesonClaims ClientMetaData {..} =
   M.empty
     &  at "client_name"
-    ?~ toJSON _clientName
+    .~ (toJSON <$> _clientName)
     &  at "client_uri"
     .~ (toJSON <$> _clientUri)
     &  at "contacts"
@@ -856,7 +854,7 @@ metaDataToAesonClaims ClientMetaData {..} =
     &  at "tos_uri"
     .~ (toJSON <$> _tosUri)
     &  at "subject_type"
-    ?~ toJSON _subjectType
+    .~ (toJSON <$> _subjectType)
     &  at "sector_identifier_uri"
     .~ (toJSON <$> _sectorIdentifierUri)
     &  (<> jwkSetClaims _keySet)
@@ -895,7 +893,7 @@ metaDataToAesonClaims ClientMetaData {..} =
     &  at "grant_types"
     .~ (toJSON <$> _grantTypes)
     &  at "application_type"
-    ?~ toJSON _applicationType
+    .~ (toJSON <$> _applicationType)
     &  (<> ( _TokenEndpointAuthMethod
            . _FapiTokenEndpointAuthMethod
            # _tokenEndpointAuthMethod
@@ -905,17 +903,14 @@ metaDataToAesonClaims ClientMetaData {..} =
     .~ (toJSON <$> _scope)
     &  at "software_id"
     .~ (toJSON <$> _softwareId)
-    &  at "client_notification_endpoint"
-    .~ (toJSON <$> _clientNotificationEndpoint)
     &  at "software_version"
     .~ (toJSON <$> _softwareVersion)
+    &  at "client_notification_endpoint"
+    .~ (toJSON <$> _clientNotificationEndpoint)
 
 -- | Currently all meta-data is included in the software statement.
 ssToAesonClaims :: SoftwareStatement -> AesonClaims
 ssToAesonClaims = metaDataToAesonClaims . _ssMetaData
-
--- | JWK that has only CDR accepted @alg@ type, and enforced supply of @kid@
-newtype FapiJwk = FapiJwk JWK
 
 -- | Sign a registration request for sending to OP.
 regoReqToJwt
@@ -927,8 +922,8 @@ regoReqToJwt
   -> m SignedJWT
 regoReqToJwt j h c rr
   = let
-      mkCs h m =
-        emptyClaimsSet & setRegisteredClaims h & unregisteredClaims .~ m
+      mkCs rc m =
+        emptyClaimsSet & setRegisteredClaims rc & unregisteredClaims .~ m
       ssClaims ssreg = mkCs (_ssSigningData ssreg) (ssToAesonClaims ssreg)
       reqAcm = metaDataToAesonClaims . _regReqClientMetaData $ rr
       reqClaims ssb64 =
@@ -942,6 +937,7 @@ regoReqToJwt j h c rr
         -- .. and now sign the rego request
         signClaims j (mkHeaders h) (reqClaims ssb64)
 
+--todo add header protection (see makeJWSHeader)
 mkHeaders :: JwsHeaders -> JWSHeader ()
 mkHeaders h = newJWSHeader ((), _FapiPermittedAlg # _alg h) & kid ?~ HeaderParam
           ()
@@ -1053,13 +1049,13 @@ maybeErrors e = maybe (throwError e) pure
 aesonClaimsToMetaData
   :: forall e m . (AsError e, MonadError e m) => AesonClaims -> m ClientMetaData
 aesonClaimsToMetaData m = do
-  _clientName          <- getClaim m "client_name"
+  _clientName          <- getmClaim m "client_name"
   _clientUri           <- getmClaim m "client_uri"
   _contacts            <- getmClaim m "contacts"
   _logoUri             <- getmClaim m "logo_uri"
   _policyUri           <- getmClaim m "policy_uri"
   _tosUri              <- getmClaim m "tos_uri"
-  _subjectType         <- getClaim m "subject_type"
+  _subjectType         <- getmClaim m "subject_type"
   _sectorIdentifierUri <- getmClaim m "sector_identifier_uri"
   -- Fail if *both* jwks and jwks_uri are supplied
   _keySet <- join $ liftA2 chkks (getmClaim m "jwks") (getmClaim m "jwks_uri")
@@ -1083,7 +1079,7 @@ aesonClaimsToMetaData m = do
   _idTokenSignedResponseAlg <- getClaim m "id_token_signed_response_alg"
   _requestObjectSigningAlg  <- getClaim m "request_object_signing_alg"
   _grantTypes               <- getmClaim m "grant_types"
-  _applicationType          <- getClaim m "application_type"
+  _applicationType          <- getmClaim m "application_type"
   _tokenEndpointAuthMethod  <-
     maybeErrors (_InvalidClaim # "Invalid endpoint auth method.")
     =<< (^? _FapiTokenEndpointAuthMethod)

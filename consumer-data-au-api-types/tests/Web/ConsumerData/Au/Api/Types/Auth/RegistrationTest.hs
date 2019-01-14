@@ -14,7 +14,6 @@ import           Control.Monad.Catch
 import           Crypto.JWT
     (Alg (..), Audience (Audience), NumericDate (..), StringOrURI,
     decodeCompact, encodeCompact, string, uri)
-import           Data.Aeson                               (eitherDecode, encode)
 import           Data.ByteString                          (ByteString)
 import qualified Data.ByteString.Lazy                     as LBS
 import           Data.Maybe                               (isNothing)
@@ -24,10 +23,8 @@ import           Data.Text                                (Text)
 import           Data.Time.Calendar                       (fromGregorian)
 import           Data.Time.Clock
 import           Hedgehog
-    (MonadGen, Property, PropertyT, assert, evalEither, evalExceptT, property,
-    (===))
+    (MonadGen, Property, PropertyT, assert, evalExceptT, property, (===))
 import qualified Hedgehog.Gen                             as Gen
-import           Hedgehog.Helpers                         (sampleT)
 import           Network.URI                              (parseURI)
 import           Prelude                                  hiding (exp)
 import           Text.URI
@@ -37,7 +34,7 @@ import           Text.URI.Gens
 import           Web.ConsumerData.Au.Api.Types.Auth.Error (Error)
 -- `forAllT` should probs be public: https://github.com/hedgehogqa/haskell-hedgehog/issues/203
 import           Control.Monad.Except
-    (ExceptT, MonadIO, liftIO, runExceptT)
+    (ExceptT, MonadIO, liftIO)
 import           Hedgehog.Internal.Property                      (forAllT)
 import qualified Hedgehog.Range                                  as Range
 import           Test.Tasty                                      (TestTree)
@@ -96,15 +93,6 @@ regoJwtRoundTrips =
       jwt2ar = jwtToRegoReq (const True) (const True) (const True) (const True) j
                  <=< decodeCompact
     (=== r) <=< evalExceptT . (fmap (\(_,_,r')->r') . jwt2ar <=< ar2jwt) $ r
-
--- showround :: IO (Either Error RegistrationRequest)
--- showround = do
---   rr <- sampleT genRegReq
---   (jwk,_) <- sampleT genJWK
---   let ar2jwt = fmap encodeCompact . regoReqToJwt jwk
---       jwt2ar = jwt2rego jwk <=< decodeCompact
---   runExceptT $ (jwt2ar <=< ar2jwt) rr
-
 
 genRegReq::
   ( MonadGen n
@@ -186,16 +174,16 @@ genMeta ::
 genMeta =
   ClientMetaData <$>
     genAlg <*>
-    genApplicationType <*>
+    Gen.maybe genApplicationType <*>
     genAuthMeth <*>
     Gen.maybe genGrantTypes <*>
-    genScript <*>
+    Gen.maybe genScript <*>
     Gen.maybe genScriptUri <*>
     Gen.maybe genContacts <*>
     Gen.maybe genScriptUri <*>
     Gen.maybe genScriptUri <*>
     Gen.maybe genScriptUri <*>
-    genSubjectType<*>
+    Gen.maybe genSubjectType<*>
     Gen.maybe genHttpsUrl <*>
     Gen.maybe genJwks <*>
     Gen.maybe genRequestUris <*>
