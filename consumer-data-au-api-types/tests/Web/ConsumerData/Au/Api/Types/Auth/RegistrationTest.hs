@@ -85,13 +85,17 @@ regoJwtRoundTrips::
   Property
 regoJwtRoundTrips =
   property $ do
-    rr <- forAllT genRegReq
-    (jwk,_) <- forAllT genJWKP256
+    (j,alg) <- forAllT genJWK
+    a :: FapiPermittedAlg <- forAllT . Gen.just $ pure (alg ^? _FapiPermittedAlg)
+    h <- JwsHeaders a <$> forAllT genKid
+    c <- forAllT genRegClaims
+    r <- forAllT genRegReq
     let
       ar2jwt :: RegistrationRequest -> ExceptT Error (PropertyT IO) LBS.ByteString
-      ar2jwt = fmap encodeCompact . regoReqToJwt jwk
-      jwt2ar = jwtToRegoReq (const True) (const True) (const True) (const True) jwk <=< decodeCompact
-    (=== rr) <=< evalExceptT . (jwt2ar <=< ar2jwt) $ rr
+      ar2jwt = fmap encodeCompact . regoReqToJwt j h c
+      jwt2ar = jwtToRegoReq (const True) (const True) (const True) (const True) j
+                 <=< decodeCompact
+    (=== r) <=< evalExceptT . (fmap (\(_,_,r')->r') . jwt2ar <=< ar2jwt) $ r
 
 -- showround :: IO (Either Error RegistrationRequest)
 -- showround = do
@@ -109,7 +113,7 @@ genRegReq::
   )
   => n RegistrationRequest
 genRegReq =
-  RegistrationRequest <$> genHeaders <*> genRegClaims <*> genMeta <*> (DecodedSs <$> genSs)
+  RegistrationRequest <$> genMeta <*> (DecodedSs <$> genSs)
 
 genHeaders::
   ( MonadGen n

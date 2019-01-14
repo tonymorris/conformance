@@ -75,23 +75,26 @@ module Web.ConsumerData.Au.Api.Types.Auth.Registration
 where
 
 import           Aeson.Helpers
-    (parseJSONWithPrism, parseSpaceSeperatedSet, toJsonSpaceSeperatedSet, _URI)
+    (parseJSONWithPrism, parseSpaceSeperatedSet, parseWithPrism,
+    toJsonSpaceSeperatedSet, _URI)
 import           Control.Applicative                       (liftA2, (<|>))
 import           Control.Lens
     (Prism', at, makePrisms, makeWrapped, prism, prism', to, ( # ), (&), (.~),
     (?~), (^.), (^?), _Right)
 import           Control.Lens.Combinators                  (_Just)
 import           Control.Lens.Wrapped                      (_Unwrapped)
-import           Control.Monad                             (join, liftM2)
+import           Control.Monad                             (join)
 import           Control.Monad.Error.Class
     (MonadError, throwError)
+import           Control.Monad.Error.Lens                  (throwing)
 import           Control.Monad.Time                        (MonadTime)
 import qualified Crypto.JOSE.Error                         as JE
 import           Crypto.JOSE.JWA.JWE                       (Enc)
 import qualified Crypto.JOSE.JWA.JWE                       as JWE
 import           Crypto.JOSE.JWK                           (JWK)
 import           Crypto.JOSE.JWS
-    (HeaderParam (..), alg, header, kid, newJWSHeader, signatures)
+    (HeaderParam (..), JWSHeader, ProtectionIndicator, alg, header, kid,
+    newJWSHeader, signatures)
 import           Crypto.JWT
     (AsJWTError, Audience, ClaimsSet, NumericDate, SignedJWT, StringOrURI,
     claimAud, claimExp, claimIat, claimIss, claimJti, decodeCompact,
@@ -100,6 +103,7 @@ import           Crypto.JWT
 import           Crypto.Random.Types                       (MonadRandom)
 import           Data.Aeson
     (FromJSON (..), Result (..), ToJSON (..), Value (..), fromJSON)
+import           Data.Aeson.Types                          (Parser)
 import           Data.Bool                                 (bool)
 import qualified Data.ByteString.Lazy                      as BSL
     (fromStrict, toStrict)
@@ -276,6 +280,7 @@ instance FromJSON Script where
 
 data Language = DefaultLang
   deriving (Generic, ToJSON, FromJSON, Show, Eq)
+
 data ScriptUri = ScriptUri Language URI
   deriving (Generic, Show, Eq)
 
@@ -417,7 +422,7 @@ getTokEndPtMeth m = do
     "tls_client_auth" ->
       TlsClientAuth <$> getClaim m "tls_client_auth_subject_dn"
     "none" -> pure None
-    _      -> throwError $ _ParseError # "Invalid token_endpoint_auth_method"
+    _      -> throwing _ParseError "Invalid token_endpoint_auth_method"
 
 instance ToJSON TokenEndpointAuthMethod where
   toJSON = toJSON . (_TokenEndpointAuthMethod #)
@@ -525,10 +530,9 @@ instance ToJSON RedirectUrls where
   toJSON (RedirectUrls set) =
     toJsonSpaceSeperatedSet (render . getRedirectUri) set
 
---todo bug, doesn't use prism
 instance FromJSON RedirectUrls where
-  parseJSON =
-    fmap RedirectUrls . parseSpaceSeperatedSet (_URI . _Unwrapped) "RedirectUrls"
+  parseJSON v = parseWithPrism _RedirectUrls "RedirectUrls"
+    =<< parseSpaceSeperatedSet (_URI . _Unwrapped) "RedirectUri" v
 
 -- | Constructor for @redirect_url@ array; all URLs must be HTTPS, none may be
 -- localhost, as mandated by CDR.
@@ -916,11 +920,12 @@ newtype FapiJwk = FapiJwk JWK
 -- | Sign a registration request for sending to OP.
 regoReqToJwt
   :: (MonadRandom m, MonadError e m, AsError e, JE.AsError e)
-  => FapiJwk
+  => JWK
+  -> JwsHeaders
   -> JwsRegisteredClaims
   -> RegistrationRequest
   -> m SignedJWT
-regoReqToJwt jwk c rr
+regoReqToJwt j h c rr
   = let
       mkCs h m =
         emptyClaimsSet & setRegisteredClaims h & unregisteredClaims .~ m
@@ -928,20 +933,19 @@ regoReqToJwt jwk c rr
       reqAcm = metaDataToAesonClaims . _regReqClientMetaData $ rr
       reqClaims ssb64 =
         mkCs c (reqAcm & at "software_statement" ?~ ssb64)
-      --todo must generate this from the FapiJwk
-      --must generate our own headers as Jose 'selects cryptographically strongest' alg based on supplied key, which we dont want
-      jwsHead =
-        newJWSHeader ((), _FapiPermittedAlg # _alg h) & kid ?~ HeaderParam
-          ()
-          (getFapiKid $ _kid h)
     in
       do
-      -- get the b64 SSA as an aeson Value
+        -- get the b64 SSA as an aeson Value
         ssb64 <- case _regReqsoftwareStatement rr of
           EncodedSs ss -> return $ toJSON ss
-          DecodedSs ss -> jwtToJson <$> signClaims jwk jwsHead (ssClaims ss)
+          DecodedSs ss -> jwtToJson <$> signClaims j (mkHeaders h) (ssClaims ss)
         -- .. and now sign the rego request
-        signClaims jwk jwsHead (reqClaims ssb64)
+        signClaims j (mkHeaders h) (reqClaims ssb64)
+
+mkHeaders :: JwsHeaders -> JWSHeader ()
+mkHeaders h = newJWSHeader ((), _FapiPermittedAlg # _alg h) & kid ?~ HeaderParam
+          ()
+          (getFapiKid $ _kid h)
 
 setRegisteredClaims :: JwsRegisteredClaims -> ClaimsSet -> ClaimsSet
 setRegisteredClaims h claims =
@@ -1058,7 +1062,7 @@ aesonClaimsToMetaData m = do
   _subjectType         <- getClaim m "subject_type"
   _sectorIdentifierUri <- getmClaim m "sector_identifier_uri"
   -- Fail if *both* jwks and jwks_uri are supplied
-  _keySet <- join $ liftM2 chkks (getmClaim m "jwks") (getmClaim m "jwks_uri")
+  _keySet <- join $ liftA2 chkks (getmClaim m "jwks") (getmClaim m "jwks_uri")
   _requestUris         <- getmClaim m "request_uris"
   _redirectUris        <- getClaim m "redirect_uris"
   ra                   <- getmClaim m "request_object_encryption_alg"
