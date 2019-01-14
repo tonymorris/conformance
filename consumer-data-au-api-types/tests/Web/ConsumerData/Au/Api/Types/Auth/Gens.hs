@@ -3,7 +3,6 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections       #-}
 
 module Web.ConsumerData.Au.Api.Types.Auth.Gens where
 
@@ -61,14 +60,6 @@ genClaims ::
 genClaims =
   Claims Nothing <$> genIdTokenClaims
 
--- | The only valid signing algorithm allowed, as specified in CDR
-genJWKP256 ::
-  ( MonadGen n
-  , MonadIO n
-  )
-  => n JWK.JWK
-genJWKP256 = liftIO . JWK.genJWK =<< genKeyMaterialRSA
-
 genJWK ::
   ( MonadGen n
   , MonadIO n
@@ -79,7 +70,9 @@ genJWK = do
   let alg = signingAlg (jwk ^. JWK.jwkMaterial)
   return (jwk,alg)
 
--- The choice of key material dictates the signing alg --- see 'genKeyMaterial'
+-- | Valid signing algorithms are specified in
+-- <https://openid.net/specs/openid-financial-api-part-2.html#jws-algorithm-considerations FAPI R+W §8.6>.
+-- These choices dictate the key material that is valid --- see 'genKeyMaterial'
 signingAlg ::
   JWK.KeyMaterial
   -> Alg
@@ -87,7 +80,7 @@ signingAlg = \case
   JWK.ECKeyMaterial _ -> ES256
   _ -> PS256
 
--- | Key material dictated by 'signingAlg''s algorithms and the
+-- | Valid key material dictated by allowed signing algorithms (see 'signingAlg') and the
 -- <https://github.com/frasertweedale/hs-jose/blob/18865d7af9d3b16d737f38579643399cf4facc1b/src/Crypto/JOSE/JWA/JWK.hs#L610 JWK module in @jose@>
 genKeyMaterial ::
   MonadGen n
